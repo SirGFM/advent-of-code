@@ -126,18 +126,50 @@ for y, line in enumerate(sys.stdin):
 		grid_line.append(Node(c, x, y))
 	grid.append(grid_line)
 
-	if y > 0:
-		for node in grid[y - 1]:
-			if node.beam == Direction.DOWN:
-				node.run(grid)
-	else:
-		starter = Node('.', -1, 0)
-		starter.beam = Direction.RIGHT
-		starter.run(grid)
+def exec(x, y, direction, grid, done):
+	starter = Node('.', x, y)
+	starter.beam = direction
+	starter.run(grid)
+
+	total = 0
+	for line in grid:
+		for node in line:
+			if node.beam != Direction.NONE:
+				total += 1
+	done(total)
+
+import multiprocessing as mp
+
+def run(x, y, direction, grid, queue):
+	exec(x, y, direction, grid, lambda total: queue.put(total))
+
+q = mp.Queue()
+jobs = []
+min_x = -1
+max_x = len(grid[0])
+min_y = -1
+max_y = len(grid[1])
+for y in range(max_y):
+	p = mp.Process(target=run, args=(min_x, y, Direction.RIGHT, grid, q))
+	jobs.append(p)
+	p = mp.Process(target=run, args=(max_x, y, Direction.LEFT, grid, q))
+	jobs.append(p)
+for x in range(max_x):
+	p = mp.Process(target=run, args=(x, min_y, Direction.DOWN, grid, q))
+	jobs.append(p)
+	p = mp.Process(target=run, args=(x, max_y, Direction.UP, grid, q))
+	jobs.append(p)
+
+for j in jobs:
+	j.start()
+for j in jobs:
+	j.join()
 
 total = 0
-for line in grid:
-	for node in line:
-		if node.beam != Direction.NONE:
-			total += 1
-print(total)
+while not q.empty():
+	cur = q.get()
+	if cur > total:
+		total = cur
+print('part 2:', total)
+
+exec(-1, 0, Direction.RIGHT, grid, lambda total: print('part 1:', total))
