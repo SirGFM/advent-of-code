@@ -10,12 +10,13 @@ class Direction(enum.Enum):
 	MAX = 4
 
 class Node:
-	def __init__(self, cost, x, y, direction, path_dist, max_dist):
+	def __init__(self, cost, x, y, direction, path_dist, min_dist, max_dist):
 		self.cost = cost
 		self.x = x
 		self.y = y
 		self.dir = direction
 		self.path_dist = path_dist
+		self.min_dist = min_dist
 		self.max_dist = max_dist
 		self.f_score = 0
 
@@ -35,6 +36,8 @@ class Node:
 		self.f_score = value
 
 	def neighbours(self):
+		if self.path_dist < self.min_dist:
+			return [self.dir]
 		neighbours = []
 		neighbours.append(Direction((self.dir.value - 1) % Direction.MAX.value))
 		neighbours.append(Direction((self.dir.value + 1) % Direction.MAX.value))
@@ -62,7 +65,7 @@ class Node:
 		cost = m.at(x, y)
 		if cost is None:
 			return None
-		return Node(cost, x, y, direction, path_dist, self.max_dist)
+		return Node(cost, x, y, direction, path_dist, self.min_dist, self.max_dist)
 
 class Map:
 	def __init__(self):
@@ -153,10 +156,14 @@ def a_star(start, goal_idx, h, m):
 def heuristic(node, goal_idx):
 	return node.dist(goal_idx[0], goal_idx[1])
 
-start = Node(m.at(0, 0), 0, 0, Direction.RIGHT, 1, 3)
-path = a_star(start, (m.width - 1, m.height - 1), heuristic, m)
+def find_cost(min_dist, max_dist):
+	start = Node(m.at(0, 0), 0, 0, Direction.RIGHT, 1, min_dist, max_dist)
+	path = a_star(start, (m.width - 1, m.height - 1), heuristic, m)
 
-total = -1 * m.at(0, 0)
-for node in path:
-	total += node.cost
-print(total)
+	total = -1 * m.at(0, 0)
+	for node in path:
+		total += node.cost
+	print(total)
+
+find_cost(1, 3)
+find_cost(4, 10)
