@@ -24,20 +24,24 @@ fn check_part1(entries: &Vec<i32>) -> bool {
 	return true;
 }
 
-fn check_part2(entries: &Vec<i32>) -> bool {
+fn check_part2(entries: &Vec<i32>, reverse: bool) -> bool {
 	let mut last = -1;
 	let mut dir = 0;
 	let mut skipped = false;
 
-	// TODO: Skip first?
 	for i in 0..entries.len() {
 		let num = entries[i];
 
 		if last != -1 {
 			let cur = last - num;
 			if cur.abs() < 1 || cur.abs() > 3 {
-				if skipped || i == entries.len() - 1 {
-					return false;
+				if skipped {
+					if reverse {
+						return false;
+					}
+					let mut tmp = entries.clone();
+					tmp.reverse();
+					return check_part2(&tmp, true);
 				}
 				skipped = true;
 				continue;
@@ -45,8 +49,13 @@ fn check_part2(entries: &Vec<i32>) -> bool {
 
 			let cur_dir = cur / cur.abs();
 			if dir != 0 && dir != cur_dir {
-				if skipped || i == entries.len() - 1 {
-					return false;
+				if skipped {
+					if reverse {
+						return false;
+					}
+					let mut tmp = entries.clone();
+					tmp.reverse();
+					return check_part2(&tmp, true);
 				}
 				skipped = true;
 				continue;
@@ -83,7 +92,7 @@ fn main() {
 		if check_part1(&entries) {
 			p1_result += 1;
 		}
-		if check_part2(&entries) {
+		if check_part2(&entries, false) {
 			p2_result += 1;
 		}
 
