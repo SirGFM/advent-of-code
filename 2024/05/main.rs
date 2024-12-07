@@ -21,28 +21,26 @@ impl Page {
 		self.before.insert(value, true);
 	}
 
-	fn cmp(&self, other: &Self) -> cmp::Ordering {
+	fn cmp(&self, other: &Self) -> Option<cmp::Ordering> {
 		if self.before.get(&other.page).is_some() {
-			cmp::Ordering::Less
+			Some(cmp::Ordering::Less)
 		} else if other.before.get(&self.page).is_some() {
-			cmp::Ordering::Greater
-		} else if self.page < other.page {
-			cmp::Ordering::Less
+			Some(cmp::Ordering::Greater)
 		} else {
-			cmp::Ordering::Greater
+			None
 		}
 	}
 }
 
 impl Ord for Page {
 	fn cmp(&self, other: &Self) -> cmp::Ordering {
-		self.cmp(other)
+		self.cmp(other).unwrap()
 	}
 }
 
 impl PartialOrd for Page {
 	fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
-		Some(self.cmp(other))
+		self.cmp(other)
 	}
 }
 
@@ -54,12 +52,37 @@ impl PartialEq for Page {
 
 impl Eq for Page {}
 
+fn insert_page(pages: &mut PageDict, page: usize, value: Option<usize>) {
+	match value {
+		Some(v) => {
+			match pages.get_mut(&page) {
+				Some(tmp) => {
+					tmp.add(v);
+					pages.get_mut(&page).unwrap().before.get(&v).unwrap();
+				},
+				None => {
+					let mut tmp = Page::new(page);
+					tmp.add(v);
+					pages.insert(page, tmp);
+				},
+			}
+			insert_page(pages, v, None);
+		},
+		None => {
+			if pages.get_mut(&page).is_none() {
+				pages.insert(page, Page::new(page));
+			}
+		},
+	}
+}
+
 fn main() {
 	let stdin = io::stdin();
 	let mut handle = stdin.lock();
 
 	let mut buf = String::new();
 	let mut p1_result = 0;
+	let mut p2_result = 0;
 
 	let mut pages = PageDict::new();
 
@@ -82,24 +105,14 @@ fn main() {
 			.collect();
 		assert_eq!(values.len(), 2);
 
-		match pages.get_mut(&values[0]) {
-			Some(page) => { page.add(values[1]); },
-			None => {
-				let mut page = Page::new(values[0]);
-				page.add(values[1]);
-				pages.insert(values[0], page);
-
-				pages.insert(values[1], Page::new(values[1]));
-			},
-		}
+		insert_page(&mut pages, values[0], Some(values[1]));
 	}
+
+/* XXX: This doesn't sort nicely as I'd assumed...
 
 	// Sort pages.
 	let mut sorted_pages = Vec::<&Page>::new();
 	for (_, val) in pages.iter() {
-		if val.before.len() == 0 {
-			println!("{}", val.page)
-		}
 		sorted_pages.push(val);
 	}
 	sorted_pages.sort_unstable();
@@ -108,6 +121,7 @@ fn main() {
 	for (i, cur) in sorted_pages.iter().enumerate() {
 		page_pos[cur.page] = i;
 	}
+*/
 
 	// Read manuals.
 	loop {
@@ -123,24 +137,44 @@ fn main() {
 			.collect();
 
 		let mut inc = true;
-		let mut last: usize = 0;
 		for i in 0..manual.len() {
-			let page = manual[i];
+			let cur = pages.get(&manual[i]).unwrap();
 
-			if page_pos[page] < last {
-				inc = false;
-				break;
+			for j in 0..manual.len() {
+				if i == j {
+					continue
+				}
+
+				let other = pages.get(&manual[j]).unwrap();
+				inc = match cur.cmp(other) {
+					Some(cmp::Ordering::Less) => i < j,
+					Some(cmp::Ordering::Greater) => i > j,
+					_ => false,
+				};
+
+				if !inc {
+					break;
+				}
 			}
 
-			last = page_pos[page]
+			if !inc {
+				break;
+			}
 		}
 
-		if !inc {
-			continue;
-		}
+		if inc {
+			p1_result += manual[manual.len() / 2];
+		} else {
+			let mut manual_pages: Vec<&Page> = manual
+				.into_iter()
+				.map(|x| pages.get(&x).unwrap())
+				.collect();
 
-		p1_result += manual[manual.len() / 2];
+			manual_pages.sort();
+			p2_result += manual_pages[manual_pages.len() / 2].page;
+		}
 	}
 
 	println!("part 1: {}", p1_result);
+	println!("part 2: {}", p2_result);
 }
