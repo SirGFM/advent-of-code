@@ -13,6 +13,7 @@ struct Diagonal {
 	i: usize,
 	x: usize,
 	y: usize,
+	to: usize,
 	side: usize,
 	max: usize,
 }
@@ -25,13 +26,14 @@ impl Diagonal {
 			i: 0,
 			x: 0,
 			y: 0,
+			to: 0,
 			side: side,
 			max: side * side,
 		}
 	}
 
 	fn is_new_line(&self) -> bool {
-		return self.x == 0 || self.y == self.side - 1;
+		return self.y == 0 || self.x == self.side - 1;
 	}
 }
 
@@ -58,12 +60,15 @@ impl Iterator for Diagonal {
 			let tmp = self.x;
 			self.x = self.y + 1;
 			self.y = tmp;
+			self.to = 0;
 		} else if self.y == 0 {
 			self.y = self.x + 1;
 			self.x = 0;
+			self.to = 0;
 		} else {
 			self.x += 1;
 			self.y -= 1;
+			self.to += 1;
 		}
 
 		if self.i >= self.max {
@@ -76,7 +81,7 @@ impl Iterator for Diagonal {
 
 			return Some(Self::Item{
 				from: x + self.y * self.side,
-				to: self.i,
+				to: self.to,
 			})
 		}
 	}
@@ -109,81 +114,108 @@ fn main() {
 		buf.clear();
 	}
 
-	// Read left-to-right.
 	let input_bytes = input.as_bytes();
-	let mut lr_vec = vec!['.' as u8; input_bytes.len() + line_len];
+	let mut buf = vec!['.' as u8; line_len * 2];
+
+	// Count horizontal lines.
+	for i in 0..input.len() {
+		let idx = i % line_len;
+
+		buf[idx] = input_bytes[i];
+		if idx == line_len - 1 {
+			let tmp = str::from_utf8(&buf[0..line_len]).unwrap();
+			let rev = tmp.chars().rev().collect::<String>();
+
+			p1_result += re.captures_iter(&tmp).count();
+			p1_result += re.captures_iter(&rev).count();
+		}
+	}
+
+	// Count vertical lines.
 	for i in 0..input.len() {
 		let x = i % line_len;
 		let y = i / line_len;
 
-		// Separate adjacent lines.
-		lr_vec[1 + x + y * line_len] = input_bytes[i];
-	}
-	let lr = str::from_utf8(&lr_vec).unwrap();
+		buf[x] = input_bytes[y + x * line_len];
+		if x == line_len - 1 {
+			let tmp = str::from_utf8(&buf[0..line_len]).unwrap();
+			let rev = tmp.chars().rev().collect::<String>();
 
-	// Convert to up-down.
-	let mut ud_vec = vec!['.' as u8; input_bytes.len() + line_len];
-	for i in 0..input.len() {
+			p1_result += re.captures_iter(&tmp).count();
+			p1_result += re.captures_iter(&rev).count();
+		}
+	}
+
+	// Count left-to-right diagonal.
+	let mut diagonal = Diagonal::new(line_len, false);
+	loop {
+		let point = match diagonal.next() {
+			Some(v) => v,
+			None => break,
+		};
+
+		buf[point.to] = input_bytes[point.from];
+		if diagonal.is_new_line() {
+			let tmp = str::from_utf8(&buf[0..point.to+1]).unwrap();
+			let rev = tmp.chars().rev().collect::<String>();
+
+			p1_result += re.captures_iter(&tmp).count();
+			p1_result += re.captures_iter(&rev).count();
+		}
+	}
+
+	// Count right-to-left diagonal.
+	let mut diagonal = Diagonal::new(line_len, true);
+	loop {
+		let point = match diagonal.next() {
+			Some(v) => v,
+			None => break,
+		};
+
+		buf[point.to] = input_bytes[point.from];
+		if diagonal.is_new_line() {
+			let tmp = str::from_utf8(&buf[0..point.to+1]).unwrap();
+			let rev = tmp.chars().rev().collect::<String>();
+
+			p1_result += re.captures_iter(&tmp).count();
+			p1_result += re.captures_iter(&rev).count();
+		}
+	}
+
+	// Count X-MAS.
+	for p in input.match_indices("A") {
+		let i = p.0;
 		let x = i % line_len;
 		let y = i / line_len;
 
-		// Separate adjacent lines.
-		ud_vec[x + (y + 1) * line_len] = input_bytes[y + x * line_len];
-	}
-	let ud = str::from_utf8(&ud_vec).unwrap();
-
-	// Convert to left-to-right diagonal.
-	let mut tmp = Diagonal::new(line_len, false);
-	let mut offset = 0;
-	let mut diag_lr_vec = vec!['.' as u8; input_bytes.len() + line_len * 2];
-	loop {
-		let point = match tmp.next() {
-			Some(v) => v,
-			None => break,
-		};
-
-		// Separate adjacent lines.
-		if tmp.is_new_line() && point.from != 0 {
-			offset += 1;
+		if x == 0 || y == 0 || x == line_len - 1 || y == line_len - 1 {
+			continue;
 		}
 
-		diag_lr_vec[point.to + offset] = input_bytes[point.from];
-	}
-	let diag_lr = str::from_utf8(&diag_lr_vec).unwrap();
+		let mut hor = vec!['.' as u8; 6];
+		hor[0] = input_bytes[x - 1 + (y - 1) * line_len];
+		hor[1] = input_bytes[x + y * line_len];
+		hor[2] = input_bytes[x + 1 + (y + 1) * line_len];
 
-	// Convert to right-to-left diagonal.
-	let mut offset = 0;
-	let mut tmp = Diagonal::new(line_len, true);
-	let mut diag_rl_vec = vec!['.' as u8; input_bytes.len() + line_len * 2];
-	loop {
-		let point = match tmp.next() {
-			Some(v) => v,
-			None => break,
-		};
+		hor[3] = input_bytes[x - 1 + (y + 1) * line_len];
+		hor[4] = input_bytes[x + y * line_len];
+		hor[5] = input_bytes[x + 1 + (y - 1) * line_len];
 
-		// Separate adjacent lines.
-		if tmp.is_new_line() && point.from != 0 {
-			offset += 1;
+		let mut ver = vec!['.' as u8; 6];
+		ver[0] = input_bytes[x - 1 + (y - 1) * line_len];
+		ver[1] = input_bytes[x + y * line_len];
+		ver[2] = input_bytes[x + 1 + (y + 1) * line_len];
+		ver[3] = input_bytes[x + 1 + (y - 1) * line_len];
+		ver[4] = input_bytes[x + y * line_len];
+		ver[5] = input_bytes[x - 1 + (y + 1) * line_len];
+
+		let hor_str = str::from_utf8(&hor).unwrap();
+		let ver_str = str::from_utf8(&ver).unwrap();
+
+		if hor_str == "MASMAS" || hor_str == "SAMSAM" || ver_str == "MASMAS" || ver_str == "SAMSAM" {
+			p2_result += 1;
 		}
-
-		diag_rl_vec[point.to + offset] = input_bytes[point.from];
 	}
-	let diag_rl = str::from_utf8(&diag_rl_vec).unwrap();
-
-	// Invert everything.
-	let diag_rl_rev = diag_rl.chars().rev().collect::<String>();
-	let diag_lr_rev = diag_lr.chars().rev().collect::<String>();
-	let du = ud.chars().rev().collect::<String>();
-	let rl = lr.chars().rev().collect::<String>();
-
-	p1_result += re.captures_iter(&lr).count();
-	p1_result += re.captures_iter(&rl).count();
-	p1_result += re.captures_iter(&ud).count();
-	p1_result += re.captures_iter(&du).count();
-	p1_result += re.captures_iter(&diag_lr).count();
-	p1_result += re.captures_iter(&diag_lr_rev).count();
-	p1_result += re.captures_iter(&diag_rl).count();
-	p1_result += re.captures_iter(&diag_rl_rev).count();
 
 	println!("part 1: {}", p1_result);
 	println!("part 2: {}", p2_result);
