@@ -1,6 +1,6 @@
 use std::io::{self, BufRead};
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 struct File {
 	size: usize,
 	data: Option<usize>,
@@ -22,7 +22,7 @@ impl File {
 	}
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 struct Node {
 	file: File,
 	idx: usize,
@@ -56,6 +56,25 @@ impl LinkedList {
 		}
 	}
 
+	fn to_data(&self, data: &mut Vec<usize>) {
+		let mut i = 0;
+		let mut node = self.get_head();
+		while node.is_some() {
+			let tmp = node.unwrap();
+
+			for _ in 0..tmp.file.size {
+				data[i] = match tmp.file.data {
+					Some(value) => value + 1,
+					None => 0,
+				};
+
+				i += 1;
+			}
+
+			node = self.get_next(tmp);
+		}
+	}
+
 	fn append(&mut self, file: File) {
 		if self.head.is_none() {
 			let node = Node::new(file, 0, None, None);
@@ -64,12 +83,7 @@ impl LinkedList {
 			self.tail = Some(0);
 		} else {
 			let prev = self.tail.unwrap();
-
-			let idx = self.buf.len();
-			self.buf[prev].next = Some(idx);
-
-			let node = Node::new(file, idx, None, Some(prev));
-			self.buf.push(node);
+			self.insert_after(self.buf[prev], file);
 		}
 	}
 
@@ -87,11 +101,42 @@ impl LinkedList {
 		}
 	}
 
+	fn refetch_node(&self, node: Node) -> Node {
+		self.buf[node.idx]
+	}
+
 	fn update_node(&mut self, node: Node) {
 		self.buf[node.idx] = node;
+
+		if node.file.data.is_none() {
+			match node.prev {
+				Some(tmp) => {
+					let prev = self.buf[tmp];
+
+					if prev.file.data.is_none() {
+						self.buf[node.idx].file.size += prev.file.size;
+						self.remove_node(prev);
+					}
+				},
+				_ => {/* Do nothing */},
+			}
+
+			match node.next {
+				Some(tmp) => {
+					let next = self.buf[tmp];
+
+					if next.file.data.is_none() {
+						self.buf[node.idx].file.size += next.file.size;
+						self.remove_node(next);
+					}
+				},
+				_ => {/* Do nothing */},
+			}
+		}
 	}
 
 	fn remove_node(&mut self, node: Node) {
+		let node = self.refetch_node(node);
 		match self.buf[node.idx].next {
 			Some(idx) => self.buf[idx].prev = node.prev,
 			None => self.tail = node.prev,
@@ -117,6 +162,7 @@ impl LinkedList {
 	}
 
 	fn get_next(&self, cur: Node) -> Option<Node> {
+		let cur = self.refetch_node(cur);
 		match cur.next {
 			Some(idx) => Some(self.buf[idx]),
 			None => None,
@@ -124,6 +170,7 @@ impl LinkedList {
 	}
 
 	fn get_prev(&self, cur: Node) -> Option<Node> {
+		let cur = self.refetch_node(cur);
 		match cur.prev {
 			Some(idx) => Some(self.buf[idx]),
 			None => None,
@@ -190,29 +237,42 @@ fn main() {
 		}
 	}
 
-	let mut p1_result = 0;
+	println!("part 1: {}", checksum(&disk));
+
+	defrag_part2(&mut files);
+	files.to_data(&mut disk);
+
+	println!("part 2: {}", checksum(&disk));
+}
+
+fn checksum(disk: &Vec<usize>) -> usize {
+	let mut res = 0;
+
 	for i in 0..disk.len() {
 		if disk[i] == 0 {
-			break;
+			continue;
 		}
-		p1_result += i * (disk[i] - 1);
+		res += i * (disk[i] - 1);
 	}
 
-	println!("part 1: {}", p1_result);
+	return res;
+}
 
+fn defrag_part2(files: &mut LinkedList) {
 	let mut last = files.get_tail();
+
 	loop {
-		// Find the next node that may fit into this empty slot.
+		// Find the next node that may fit into an empty slot.
 		while last.is_some() && last.unwrap().file.data.is_none() {
 			last = files.get_prev(last.unwrap());
 		}
-		let last_node = match last {
+		let mut last_node = match last {
 			Some(node) => node,
-			None => break,
+			None => return,
 		};
-		let next_last = files.get_next(last_node);
+		let next_last = files.get_prev(last_node);
 
-		// Find the first empty file that would fit this file.
+		// Find the first empty slot that would fit this file.
 		let mut empty = files.get_head();
 		while empty.is_some() {
 			let tmp = empty.unwrap();
@@ -225,30 +285,36 @@ fn main() {
 
 			empty = files.get_next(tmp);
 		}
-		if empty.is_none() {
-			break;
-		}
-		let mut empty = empty.unwrap();
 
-		if empty.idx == last_node.idx {
-			continue;
-		}
+		let mut empty = match empty {
+			Some(tmp) => {
+				if tmp.idx == last_node.idx {
+					last = next_last;
+					continue;
+				}
+				tmp
+			},
+			None => {
+				last = next_last;
+				continue;
+			},
+		};
 
-		files.remove_node(last_node);
-		if last_node.file.size == empty.file.size {
-			empty.file.data = last_node.file.data;
-		} else {
+		if empty.file.size > last_node.file.size {
 			let remainder = File::new_empty(empty.file.size - last_node.file.size);
 			files.insert_after(empty, remainder);
+			empty = files.refetch_node(empty);
 
 			empty.file.size = last_node.file.size;
 		}
+		empty.file.data = last_node.file.data;
 		files.update_node(empty);
+
+		last_node.file.data = None;
+		files.update_node(last_node);
 
 		last = next_last;
 	}
-
-	//println!("part 2: {}", p2_result);
 }
 
 fn print_disk(disk: &Vec<usize>) {
@@ -260,4 +326,220 @@ fn print_disk(disk: &Vec<usize>) {
 		}
 	}
 	println!("");
+}
+
+#[test]
+fn test_ll() {
+	let mut ll = LinkedList::new();
+
+	ll.append(File::new_data(1, 0));
+	assert_eq!(ll.head, Some(0));
+	assert_eq!(ll.tail, Some(0));
+	assert_eq!(ll.buf[0].file, File{size: 1, data: Some(0)});
+
+	ll.append(File::new_empty(2));
+	assert_eq!(ll.head, Some(0));
+	assert_eq!(ll.tail, Some(1));
+	assert_eq!(
+		ll.buf[0],
+		Node{
+			file: File{size: 1, data: Some(0)},
+			idx: 0,
+			prev: None,
+			next: Some(1),
+		},
+	);
+	assert_eq!(
+		ll.buf[1],
+		Node{
+			file: File{size: 2, data: None},
+			idx: 1,
+			prev: Some(0),
+			next: None,
+		},
+	);
+
+	let head = ll.get_head();
+	assert_eq!(
+		head,
+		Some(
+			Node{
+				file: File{size: 1, data: Some(0)},
+				idx: 0,
+				prev: None,
+				next: Some(1),
+			},
+		),
+	);
+	let head = head.unwrap();
+
+	ll.insert_after(head, File::new_data(3, 4));
+	assert_eq!(
+		ll.buf[0],
+		Node{
+			file: File{size: 1, data: Some(0)},
+			idx: 0,
+			prev: None,
+			next: Some(2),
+		},
+	);
+	assert_eq!(
+		ll.buf[2],
+		Node{
+			file: File{size: 3, data: Some(4)},
+			idx: 2,
+			prev: Some(0),
+			next: Some(1),
+		},
+	);
+	assert_eq!(
+		ll.buf[1],
+		Node{
+			file: File{size: 2, data: None},
+			idx: 1,
+			prev: Some(2),
+			next: None,
+		},
+	);
+
+	let next = ll.get_next(head).unwrap();
+	assert_eq!(
+		next,
+		Node{
+			file: File{size: 3, data: Some(4)},
+			idx: 2,
+			prev: Some(0),
+			next: Some(1),
+		},
+	);
+
+	ll.insert_after(next, File::new_empty(5));
+	assert_eq!(
+		ll.buf[0],
+		Node{
+			file: File{size: 1, data: Some(0)},
+			idx: 0,
+			prev: None,
+			next: Some(2),
+		},
+	);
+	assert_eq!(
+		ll.buf[2],
+		Node{
+			file: File{size: 3, data: Some(4)},
+			idx: 2,
+			prev: Some(0),
+			next: Some(3),
+		},
+	);
+	assert_eq!(
+		ll.buf[3],
+		Node{
+			file: File{size: 5, data: None},
+			idx: 3,
+			prev: Some(2),
+			next: Some(1),
+		},
+	);
+	assert_eq!(
+		ll.buf[1],
+		Node{
+			file: File{size: 2, data: None},
+			idx: 1,
+			prev: Some(3),
+			next: None,
+		},
+	);
+
+	ll.append(File::new_empty(4));
+	assert_eq!(
+		ll.buf[0],
+		Node{
+			file: File{size: 1, data: Some(0)},
+			idx: 0,
+			prev: None,
+			next: Some(2),
+		},
+	);
+	assert_eq!(
+		ll.buf[2],
+		Node{
+			file: File{size: 3, data: Some(4)},
+			idx: 2,
+			prev: Some(0),
+			next: Some(3),
+		},
+	);
+	assert_eq!(
+		ll.buf[3],
+		Node{
+			file: File{size: 5, data: None},
+			idx: 3,
+			prev: Some(2),
+			next: Some(1),
+		},
+	);
+	assert_eq!(
+		ll.buf[1],
+		Node{
+			file: File{size: 2, data: None},
+			idx: 1,
+			prev: Some(3),
+			next: Some(4),
+		},
+	);
+	assert_eq!(
+		ll.buf[4],
+		Node{
+			file: File{size: 4, data: None},
+			idx: 4,
+			prev: Some(1),
+			next: None,
+		},
+	);
+
+	let tail = ll.get_tail().unwrap();
+	let empty = ll.get_prev(tail);
+	assert_eq!(
+		empty,
+		Some(
+			Node{
+				file: File{size: 2, data: None},
+				idx: 1,
+				prev: Some(3),
+				next: Some(4),
+			},
+		),
+	);
+
+	let empty = empty.unwrap();
+	ll.update_node(empty);
+	assert_eq!(
+		ll.buf[0],
+		Node{
+			file: File{size: 1, data: Some(0)},
+			idx: 0,
+			prev: None,
+			next: Some(2),
+		},
+	);
+	assert_eq!(
+		ll.buf[2],
+		Node{
+			file: File{size: 3, data: Some(4)},
+			idx: 2,
+			prev: Some(0),
+			next: Some(1),
+		},
+	);
+	assert_eq!(
+		ll.buf[1],
+		Node{
+			file: File{size: 11, data: None},
+			idx: 1,
+			prev: Some(2),
+			next: None,
+		},
+	);
+	assert_eq!(ll.tail, Some(1));
 }
