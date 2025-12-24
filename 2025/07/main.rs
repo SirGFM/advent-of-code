@@ -1,5 +1,33 @@
 use std::io::{self, BufRead};
 
+#[derive(Clone)]
+struct Node {
+	value: u8,
+	count: u64,
+}
+
+impl Node {
+	fn new(value: u8) -> Node {
+		Node{
+			value: value,
+			count: 0,
+		}
+	}
+
+	fn beam(&mut self, parent: &Self) {
+		if self.value == b'|' {
+			self.count += parent.count;
+		} else {
+			self.value = b'|';
+			if parent.value == b'|' {
+				self.count = parent.count;
+			} else {
+				self.count = 1;
+			}
+		}
+	}
+}
+
 fn main() {
 	let stdin = io::stdin();
 	let mut handle = stdin.lock();
@@ -8,7 +36,7 @@ fn main() {
 	let mut result_1: u64 = 0;
 	let mut result_2: u64 = 0;
 
-	let mut input = Vec::<u8>::new();
+	let mut input = Vec::<Node>::new();
 	let mut w: usize = 0;
 
 	loop {
@@ -21,28 +49,31 @@ fn main() {
 		w = line.len();
 
 		for b in line {
-			input.push(*b)
+			input.push(Node::new(*b));
 		}
 
 		buf.clear();
 	}
 
 	for i in w..input.len() {
-		match input[i-w] {
-			b'S' => input[i] = b'|',
+		let parent = &input[i-w].clone();
+
+		match parent.value {
+			b'S' => input[i].beam(parent),
 			b'|' => {
-				match input[i] {
-					b'.' => input[i] = b'|',
+				match input[i].value {
+					b'.' => input[i].beam(parent),
 					b'^' => {
 						let x = i % w;
 
 						if x > 0 {
-							input[i-1] = b'|';
+							input[i-1].beam(parent);
 						}
 						if x < w {
-							input[i+1] = b'|';
+							input[i+1].beam(parent);
 						}
 					},
+					b'|' => input[i].beam(parent),
 					_ => {},
 				}
 			},
@@ -51,8 +82,14 @@ fn main() {
 	}
 
 	for i in w..input.len() {
-		if input[i] == b'^' && input[i-w] == b'|' {
+		if input[i].value == b'^' && input[i-w].value == b'|' {
 			result_1 += 1;
+		}
+	}
+
+	for i in input.len()-w..input.len() {
+		if input[i].value == b'|' {
+			result_2 += input[i].count;
 		}
 	}
 
