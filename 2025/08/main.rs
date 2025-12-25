@@ -109,7 +109,7 @@ fn main() {
 
 	let mut conns = Vec::<Conn>::new();
 
-	for i in 1..points.len()-1 {
+	for i in 0..points.len()-1 {
 		let from = points[i].clone();
 
 		for j in i+1..points.len() {
@@ -125,47 +125,11 @@ fn main() {
 	let mut helper = HashMap::<Point, usize>::new();
 
 	for i in 0..num_conn {
-		let conn = &conns[i];
-
-		let has_from = helper.get(&conn.from).is_some();
-		let has_to = helper.get(&conn.to).is_some();
-
-		if has_from && has_to {
-			let from = *helper.get(&conn.from).unwrap();
-			let to = *helper.get(&conn.to).unwrap();
-
-			if from == to {
-				// Do nothing!
-			} else if circuits[to].len() < circuits[from].len() {
-				for point in circuits[to].clone() {
-					helper.insert(point, from);
-					circuits[from].push(point);
-				}
-				circuits[to] = Vec::<Point>::new();
-			} else {
-				for point in circuits[from].clone() {
-					helper.insert(point, to);
-					circuits[to].push(point);
-				}
-				circuits[from] = Vec::<Point>::new();
-			}
-		} else if has_from {
-			let circuit = *helper.get(&conn.from).unwrap();
-			helper.insert(conn.to, circuit);
-			circuits[circuit].push(conn.to);
-		} else if has_to {
-			let circuit = *helper.get(&conn.to).unwrap();
-			helper.insert(conn.from, circuit);
-			circuits[circuit].push(conn.from);
-		} else {
-			helper.insert(conn.from, circuits.len());
-			helper.insert(conn.to, circuits.len());
-			circuits.push(vec![conn.from, conn.to]);
-		}
+		add_conn(&conns[i], &mut circuits, &mut helper);
 	}
 
 	let mut num_conns = Vec::<usize>::new();
-	for circuit in circuits {
+	for circuit in &circuits {
 		num_conns.push(circuit.len());
 	}
 
@@ -173,6 +137,89 @@ fn main() {
 	num_conns.reverse();
 	result_1 = num_conns[0] * num_conns[1] * num_conns[2];
 
+	for i in num_conn..conns.len() {
+		if is_single_circuit(&circuits, points.len()) {
+			let conn = &conns[i-1];
+			result_2 = conn.to.x * conn.from.x;
+			break;
+		}
+
+		add_conn(&conns[i], &mut circuits, &mut helper);
+	}
+
 	println!("part 1: {}", result_1);
 	println!("part 2: {}", result_2);
+}
+
+fn is_single_circuit(circuits: &Vec<Vec<Point>>, target: usize) -> bool {
+	for i in 0..circuits.len()-1 {
+		if circuits[i].len() == 0 {
+			continue;
+		} else if circuits[i].len() != target {
+			return false;
+		}
+
+		for j in i+1..circuits.len() {
+			if circuits[j].len() != 0 {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	return false;
+}
+
+fn add_conn(conn: &Conn, circuits: &mut Vec<Vec<Point>>, helper: &mut HashMap<Point, usize>) {
+	let has_from = helper.get(&conn.from).is_some();
+	let has_to = helper.get(&conn.to).is_some();
+
+	if has_from && has_to {
+		let from = *helper.get(&conn.from).unwrap();
+		let to = *helper.get(&conn.to).unwrap();
+
+		if from == to {
+			// Do nothing!
+		} else if circuits[to].len() < circuits[from].len() {
+			merge(to, from, circuits, helper);
+		} else {
+			merge(from, to, circuits, helper);
+		}
+	} else if has_from {
+		let circuit = *helper.get(&conn.from).unwrap();
+		helper.insert(conn.to, circuit);
+		circuits[circuit].push(conn.to);
+	} else if has_to {
+		let circuit = *helper.get(&conn.to).unwrap();
+		helper.insert(conn.from, circuit);
+		circuits[circuit].push(conn.from);
+	} else {
+		helper.insert(conn.from, circuits.len());
+		helper.insert(conn.to, circuits.len());
+		circuits.push(vec![conn.from, conn.to]);
+	}
+}
+
+fn merge(old: usize, new: usize, circuits: &mut Vec<Vec<Point>>, helper: &mut HashMap<Point, usize>) {
+	let src_idx: usize;
+	let src: &mut [Vec<Point>];
+	let dst_idx: usize;
+	let dst: &mut [Vec<Point>];
+
+	if old < new {
+		src_idx = old;
+		dst_idx = new - (old + 1);
+		(src, dst) = circuits.split_at_mut(src_idx + 1);
+	} else {
+		dst_idx = new;
+		src_idx = old - (new + 1);
+		(dst, src) = circuits.split_at_mut(dst_idx + 1);
+	}
+
+	for point in &src[src_idx] {
+		helper.insert(*point, new);
+		dst[dst_idx].push(*point);
+	}
+	circuits[old] = Vec::<Point>::new();
 }
